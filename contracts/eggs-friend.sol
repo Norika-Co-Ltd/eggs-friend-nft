@@ -1,15 +1,11 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./ERC721A.sol";
 
-import "hardhat/console.sol";
-
-contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
+contract EggsFriendNFT is Ownable, ERC721A {
     using ECDSA for bytes32;
     using Strings for uint256;
 
@@ -18,7 +14,6 @@ contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
 
     // metadata URI
     string private _baseTokenURI;
-    uint256 public revealTokenId = 0;
 
     uint256 public collectionSize;
     uint256 public maxBatchSize;
@@ -46,12 +41,9 @@ contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
         currentSaleIndex = 0;
     }
 
-    modifier callerIsUser() {
-        require(tx.origin == msg.sender, "The caller is another contract");
-        _;
-    }
-
     modifier checkMintConstraint(uint256 quantity) {
+        require(tx.origin == msg.sender, "The caller is another contract");
+
         SaleConfig memory config = saleConfigs[currentSaleIndex];
         uint256 price = uint256(config.price);
 
@@ -68,7 +60,7 @@ contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
         uint256 quantity,
         string memory _ticket,
         bytes memory _signature
-    ) external payable callerIsUser checkMintConstraint(quantity) {
+    ) external payable checkMintConstraint(quantity) {
         proceedSaleStageIfNeed();
 
         require(isSaleStageOn(SaleStage.Whitelist), "Sale has not started yet");
@@ -86,7 +78,6 @@ contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
     function mint(uint256 quantity)
         external
         payable
-        callerIsUser
         checkMintConstraint(quantity)
     {
         proceedSaleStageIfNeed();
@@ -124,31 +115,6 @@ contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
             block.timestamp >= stageSaleStartTime;
     }
 
-    function setSaleConfig(
-        uint256 _saleIndex,
-        uint32 _startTime,
-        uint32 _endTime,
-        uint64 _price,
-        SaleStage _stage
-    ) external onlyOwner {
-        SaleConfig memory config = SaleConfig({
-            startTime: _startTime,
-            endTime: _endTime,
-            price: _price,
-            stage: _stage
-        });
-
-        if (_saleIndex >= saleConfigs.length) {
-            saleConfigs.push(config);
-        } else {
-            saleConfigs[_saleIndex] = config;
-        }
-    }
-
-    function setCurrentSaleIndex(uint256 _currentSaleIndex) external onlyOwner {
-        currentSaleIndex = _currentSaleIndex;
-    }
-
     function tokenURI(uint256 tokenId)
         public
         view
@@ -183,29 +149,6 @@ contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
         return config;
     }
 
-    function _baseURI() internal view virtual override returns (string memory) {
-        return _baseTokenURI;
-    }
-
-    function setBaseURI(string calldata baseURI) external onlyOwner {
-        _baseTokenURI = baseURI;
-    }
-
-    function setRevealTokenId(uint256 _revealTokenId) external onlyOwner {
-        revealTokenId = _revealTokenId;
-    }
-
-    function withdraw() external onlyOwner nonReentrant {
-        (bool success, ) = payable(payoutAddress).call{
-            value: address(this).balance
-        }("");
-        require(success, "Transfer failed.");
-    }
-
-    function numberMinted(address owner) public view returns (uint256) {
-        return _numberMinted(owner);
-    }
-
     function mintForAirdrop(address[] memory _to, uint256 _mintAmount)
         external
         onlyOwner
@@ -219,6 +162,50 @@ contract EggsFriendNFT is Ownable, ERC721A, ReentrancyGuard {
         for (uint256 i = 0; i < _to.length; i++) {
             _safeMint(_to[i], _mintAmount);
         }
+    }
+
+    function setSaleConfig(
+        uint256 _saleIndex,
+        uint32 _startTime,
+        uint32 _endTime,
+        uint64 _price,
+        SaleStage _stage
+    ) external onlyOwner {
+        SaleConfig memory config = SaleConfig({
+            startTime: _startTime,
+            endTime: _endTime,
+            price: _price,
+            stage: _stage
+        });
+
+        if (_saleIndex >= saleConfigs.length) {
+            saleConfigs.push(config);
+        } else {
+            saleConfigs[_saleIndex] = config;
+        }
+    }
+
+    function _baseURI() internal view virtual override returns (string memory) {
+        return _baseTokenURI;
+    }
+
+    function withdraw() external onlyOwner {
+        (bool success, ) = payable(payoutAddress).call{
+            value: address(this).balance
+        }("");
+        require(success, "Transfer failed.");
+    }
+
+    function numberMinted(address owner) public view returns (uint256) {
+        return _numberMinted(owner);
+    }
+
+    function setBaseURI(string calldata baseURI) external onlyOwner {
+        _baseTokenURI = baseURI;
+    }
+
+    function setCurrentSaleIndex(uint256 _currentSaleIndex) external onlyOwner {
+        currentSaleIndex = _currentSaleIndex;
     }
 
     function setMaxBatchSize(uint256 _newMaxBatchSize) external onlyOwner {
